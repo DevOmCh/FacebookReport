@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_VERSION = 'facebookreport-v6-20260914';
+const CACHE_VERSION = 'facebookreport-v7-20260914';
 const CORE_CACHE = `${CACHE_VERSION}-core`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const SCOPE = self.registration.scope;
@@ -12,7 +12,9 @@ const CORE_ASSETS = [
   coreUrl('./offline.html'),
   coreUrl('./manifest.webmanifest'),
   coreUrl('./favicon.svg'),
-  coreUrl('./pwa-register.js')
+  coreUrl('./pwa-register.js'),
+  coreUrl('./phase7.css'),
+  coreUrl('./phase7.js')
 ];
 
 const STATIC_REMOTE_HOSTS = new Set([
