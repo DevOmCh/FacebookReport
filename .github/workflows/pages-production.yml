@@ -1,4 +1,4 @@
-# Phase 8.1 — single production deployment pipeline
+# Phase 8.3 — single hardened production deployment pipeline
 name: Production Pages
 
 on:
@@ -36,13 +36,44 @@ jobs:
       - name: Build hardened production site
         run: npm run build
 
-      - name: Verify source maps are absent
+      - name: Verify hardened production artifact
         shell: bash
         run: |
+          set -euo pipefail
+
           if find dist -type f \( -name '*.map' -o -name '*.ts' -o -name '*.scss' \) | grep -q .; then
             echo 'Forbidden development artifacts found in dist/' >&2
             exit 1
           fi
+
+          if grep -Eqi '<style\b' dist/index.html; then
+            echo 'Inline style block remains in dist/index.html' >&2
+            exit 1
+          fi
+
+          if grep -Eqi 'phase7\.(css|js)|pwa-register\.js' dist/index.html; then
+            echo 'Legacy source asset reference remains in dist/index.html' >&2
+            exit 1
+          fi
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const manifest = JSON.parse(fs.readFileSync('dist/build-manifest.json', 'utf8'));
+          const failures = [];
+          if (manifest.version !== '8.3') failures.push('manifest version is not 8.3');
+          if (manifest.sourceMaps !== false) failures.push('source maps are not disabled');
+          if (manifest.fullSourceExtraction !== true) failures.push('full extraction is not enabled');
+          if (manifest.inlineStyleBlocks !== 0) failures.push('inline style blocks remain');
+          if (manifest.executableInlineScripts !== 0) failures.push('inline executable scripts remain');
+          if (manifest.obfuscated !== true) failures.push('obfuscation is not enabled');
+          if (!/^assets\/app\.[a-f0-9]{12}\.min\.css$/.test(manifest.assets.css)) failures.push('CSS asset is not fingerprinted');
+          if (!/^assets\/app\.[a-f0-9]{12}\.min\.js$/.test(manifest.assets.js)) failures.push('JS asset is not fingerprinted');
+          if (failures.length) {
+            console.error(failures.join('\n'));
+            process.exit(1);
+          }
+          console.log('Phase 8.3 production verification passed.');
+          NODE
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
