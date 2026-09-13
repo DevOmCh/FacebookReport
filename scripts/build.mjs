@@ -48,6 +48,14 @@ html = html
   .replace(/<script\b[^>]*src=["']\.\/pwa-register\.js["'][^>]*><\/script>/gi, '')
   .replace(/<script\b[^>]*src=["']\.\/phase7\.js["'][^>]*><\/script>/gi, '');
 
+// Add modern PWA capability metadata while retaining Apple compatibility.
+if (!/<meta\b[^>]*name=["']mobile-web-app-capable["']/i.test(html)) {
+  html = html.replace(
+    /(<meta\b[^>]*name=["']apple-mobile-web-app-capable["'][^>]*>)/i,
+    '$1\n<meta name="mobile-web-app-capable" content="yes">'
+  );
+}
+
 // 1) CSS: legacy stylesheet + all extracted inline styles, then minify/fingerprint.
 const cssInput = [read('phase7.css'), ...inlineStyles].join('\n');
 const cssResult = new CleanCSS({ level: 2 }).minify(cssInput);
@@ -61,8 +69,6 @@ html = html.replace(
 );
 
 // 2) JS: app inline logic first (matching original parse order), then deferred PWA/Phase 7 runtime.
-// Terser performs semantic minification/mangling; javascript-obfuscator adds a moderate
-// production-only layer without control-flow flattening/dead-code injection to avoid runtime regressions.
 const jsInput = [
   ...inlineScripts,
   read('pwa-register.js'),
@@ -113,19 +119,25 @@ if (/sourceMappingURL/i.test(obfuscatedJs)) throw new Error('Unexpected sourceMa
 const jsName = `app.${sha(obfuscatedJs)}.min.js`;
 write(path.join(ASSETS, jsName), obfuscatedJs);
 
-// Load the single generated application bundle after parsing, while CDN libraries remain unchanged.
+// Load the generated application bundle after parsing; CDN libraries remain SRI-pinned.
 html = html.replace('</head>', `<script src="./assets/${jsName}" defer></script></head>`);
 
-// 3) CSP hardening: executable inline scripts are gone, so old sha256 script hashes are unnecessary.
-html = html.replace(/(<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]+content=["'])([^"']*)(["'][^>]*>)/i,
-  (_, start, policy, end) => {
-    const cleaned = policy.replace(/\s+'sha256-[A-Za-z0-9+/=]+'/g, '');
-    return `${start}${cleaned}${end}`;
+// 3) CSP hardening. Parse the content attribute using its actual quote delimiter so
+// embedded single quotes such as 'self' and old sha256 tokens cannot break matching.
+html = html.replace(
+  /(<meta\b[^>]*http-equiv=["']Content-Security-Policy["'][^>]*\bcontent=)(["'])([\s\S]*?)\2([^>]*>)/i,
+  (_, prefix, quote, policy, suffix) => {
+    let cleaned = policy.replace(/\s+'sha256-[A-Za-z0-9+/=]+'/g, '');
+    cleaned = cleaned.replace(/connect-src([^;]*)/i, segment => {
+      if (/https:\/\/cdnjs\.cloudflare\.com/i.test(segment)) return segment;
+      return `${segment} https://cdnjs.cloudflare.com`;
+    });
+    return `${prefix}${quote}${cleaned}${quote}${suffix}`;
   }
 );
 
-// 4) Aggressively minify production markup. CSS in style attributes may still be minified;
-// there must be no <style> block or executable inline script afterward.
+// 4) Aggressively minify production markup. There must be no <style> block or
+// executable inline script afterward.
 html = await minifyHtml(html, {
   collapseWhitespace: true,
   conservativeCollapse: false,
@@ -151,11 +163,17 @@ for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
 if (/phase7\.(?:css|js)|pwa-register\.js/i.test(html)) {
   throw new Error('Phase 8.3 verification failed: legacy asset reference remains in production HTML.');
 }
+if (/'sha256-[A-Za-z0-9+/=]+'/i.test(html)) {
+  throw new Error('Phase 8.3.1 verification failed: obsolete inline-script CSP hash remains.');
+}
+if (!/<meta\b[^>]*name=["']mobile-web-app-capable["'][^>]*content=["']yes["']/i.test(html)) {
+  throw new Error('Phase 8.3.1 verification failed: modern PWA capability metadata missing.');
+}
 write(path.join(DIST, 'index.html'), html);
 
 // 5) Service Worker: precache only generated hashed assets and bump cache generation.
 let sw = read('sw.js')
-  .replace(/const CACHE_VERSION = ['"][^'"]+['"];/, `const CACHE_VERSION = 'facebookreport-v8.3-${sha(html).slice(0, 8)}';`)
+  .replace(/const CACHE_VERSION = ['"][^'"]+['"];/, `const CACHE_VERSION = 'facebookreport-v8.3.1-${sha(html).slice(0, 8)}';`)
   .replace("coreUrl('./pwa-register.js'),\n  coreUrl('./phase7.css'),\n  coreUrl('./phase7.js')", `coreUrl('./assets/${cssName}'),\n  coreUrl('./assets/${jsName}')`);
 
 const swResult = await minifyJs(sw, {
@@ -175,12 +193,14 @@ for (const file of ['404.html', 'offline.html', 'manifest.webmanifest', 'favicon
 
 // 7) Production manifest for automated verification.
 const manifest = {
-  version: '8.3',
+  version: '8.3.1',
   generatedAt: new Date().toISOString(),
   sourceMaps: false,
   fullSourceExtraction: true,
   inlineStyleBlocks: 0,
   executableInlineScripts: 0,
+  obsoleteCspScriptHashes: 0,
+  modernPwaMeta: true,
   obfuscated: true,
   assets: {
     css: `assets/${cssName}`,
@@ -190,10 +210,12 @@ const manifest = {
 };
 write(path.join(DIST, 'build-manifest.json'), JSON.stringify(manifest, null, 2));
 
-console.log(`Phase 8.3 build complete: ${path.relative(ROOT, DIST)}`);
+console.log(`Phase 8.3.1 build complete: ${path.relative(ROOT, DIST)}`);
 console.log(` - ${manifest.assets.css}`);
 console.log(` - ${manifest.assets.js}`);
 console.log(` - extracted inline styles: ${inlineStyles.length}`);
 console.log(` - extracted inline scripts: ${inlineScripts.length}`);
+console.log(' - CSP inline-script hashes: removed');
+console.log(' - modern PWA meta: enabled');
 console.log(' - obfuscation: enabled (moderate/safe profile)');
 console.log(' - source maps: disabled');
