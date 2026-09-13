@@ -12,7 +12,7 @@ const ASSETS = path.join(DIST, 'assets');
 
 const read = file => fs.readFileSync(path.join(ROOT, file), 'utf8');
 const readAbs = file => fs.readFileSync(file, 'utf8');
-const sha = text => crypto.createHash('sha256').update(text).digest('hex').slice(0, 12);
+const sha = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 12);
 const write = (file, content) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
@@ -36,6 +36,10 @@ const stripVendorScriptTags = doc => doc.replace(
   }
 );
 
+const stripExternalFontLinks = doc => doc
+  .replace(/<link\b[^>]*\bhref=(['"])https:\/\/fonts\.googleapis\.com[^'"]*\1[^>]*>/gi, '')
+  .replace(/<link\b[^>]*\bhref=(['"])https:\/\/fonts\.gstatic\.com[^'"]*\1[^>]*>/gi, '');
+
 const ensureMobileMeta = doc => {
   if (/<meta\b[^>]*name=["']mobile-web-app-capable["'][^>]*>/i.test(doc)) return doc;
   const apple = /<meta\b[^>]*name=["']apple-mobile-web-app-capable["'][^>]*>/i;
@@ -52,24 +56,48 @@ const rewriteCsp = doc => doc.replace(
     (_, quote, policy) => {
       const directives = policy
         .split(';')
-        .map(v => v.trim())
+        .map(value => value.trim())
         .filter(Boolean)
-        .map(v => {
-          const [name, ...tokens] = v.split(/\s+/);
+        .map(value => {
+          const [name, ...tokens] = value.split(/\s+/);
           return [name.toLowerCase(), tokens];
         });
 
       const map = new Map(directives);
-      map.set('script-src', ["'self'"]);
 
-      if (map.has('connect-src')) {
-        map.set(
-          'connect-src',
-          map.get('connect-src').filter(token =>
-            !/cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com/i.test(token)
-          )
-        );
-      }
+      // Phase 8.4 CSP lockdown. All executable/static runtime assets are same-origin.
+      map.set('default-src', ["'self'"]);
+      map.set('script-src', ["'self'"]);
+      map.set('script-src-elem', ["'self'"]);
+      map.set('script-src-attr', ["'none'"]);
+      map.set('style-src', ["'self'"]);
+      map.set('style-src-elem', ["'self'"]);
+      // The current UI still contains a small number of style="..." attributes and
+      // runtime element.style updates. Scope unsafe-inline to style attributes only.
+      map.set('style-src-attr', ["'unsafe-inline'"]);
+      map.set('font-src', ["'self'"]);
+      map.set('img-src', [
+        "'self'",
+        'data:',
+        'blob:',
+        'https://images.unsplash.com',
+        'https://*.fbcdn.net',
+        'https://*.googleusercontent.com'
+      ]);
+      map.set('connect-src', [
+        "'self'",
+        'https://docs.google.com',
+        'https://images.unsplash.com',
+        'https://*.fbcdn.net',
+        'https://*.googleusercontent.com'
+      ]);
+      map.set('object-src', ["'none'"]);
+      map.set('base-uri', ["'none'"]);
+      map.set('frame-src', ["'none'"]);
+      map.set('worker-src', ["'self'"]);
+      map.set('form-action', ["'self'"]);
+      map.set('manifest-src', ["'self'"]);
+      map.set('upgrade-insecure-requests', []);
 
       const serialized = [...map.entries()]
         .map(([name, tokens]) => [name, ...tokens].join(' '))
@@ -88,11 +116,14 @@ const findLicenseText = pkgDir => {
   return 'License file not found in installed package.';
 };
 
+const packageDir = packageName => path.join(ROOT, 'node_modules', ...packageName.split('/'));
+
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(ASSETS, { recursive: true });
 
-// Phase 8.3.2: remove all third-party CDN script tags before extraction.
+// Phase 8.4: remove external vendor scripts and Google Fonts stylesheet/preconnects.
 let html = stripVendorScriptTags(read('index.html'));
+html = stripExternalFontLinks(html);
 html = ensureMobileMeta(html);
 
 // Extract every inline <style> and executable inline <script> from production HTML.
@@ -109,15 +140,83 @@ html = html.replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (full, attrs, js)
   return '';
 });
 
-// Remove local runtime tags; they are bundled into the application asset below.
+// Remove local runtime tags; their contents are bundled below.
 html = html
   .replace(/<script\b[^>]*src=["']\.\/pwa-register\.js["'][^>]*><\/script>/gi, '')
   .replace(/<script\b[^>]*src=["']\.\/phase7\.js["'][^>]*><\/script>/gi, '');
 
-// 1) CSS: legacy stylesheet + extracted inline styles.
-const cssInput = [read('phase7.css'), ...inlineStyles].join('\n');
+// 1) Self-host Prompt + Sarabun via Fontsource. Prefer Thai + Latin subset CSS,
+// falling back to the package's all-subset weight CSS if subset files are unavailable.
+const fontSpecs = [
+  {
+    package: '@fontsource/prompt',
+    family: 'Prompt',
+    slug: 'prompt',
+    version: '5.3.0',
+    weights: [500, 600, 700, 800],
+    subsets: ['thai', 'latin']
+  },
+  {
+    package: '@fontsource/sarabun',
+    family: 'Sarabun',
+    slug: 'sarabun',
+    version: '5.3.0',
+    weights: [400, 500, 600, 700],
+    subsets: ['thai', 'latin']
+  }
+];
+
+const fontCssParts = [];
+const fontAssetPaths = new Set();
+
+const processFontCss = (cssText, spec, pkgDir) => cssText.replace(
+  /url\((['"]?)(\.\/files\/([^)'"?]+))\1\)/gi,
+  (full, quote, relativePath, fileName) => {
+    const source = path.join(pkgDir, 'files', fileName);
+    if (!fs.existsSync(source)) throw new Error(`Missing font asset: ${source}`);
+
+    const outputDir = path.join(ASSETS, 'fonts', spec.slug);
+    fs.mkdirSync(outputDir, { recursive: true });
+    const output = path.join(outputDir, fileName);
+    if (!fs.existsSync(output)) fs.copyFileSync(source, output);
+
+    const relativeFromDist = `assets/fonts/${spec.slug}/${fileName}`;
+    fontAssetPaths.add(relativeFromDist);
+    return `url("./fonts/${spec.slug}/${fileName}")`;
+  }
+);
+
+for (const spec of fontSpecs) {
+  const pkgDir = packageDir(spec.package);
+  const pkgJsonPath = path.join(pkgDir, 'package.json');
+  if (!fs.existsSync(pkgJsonPath)) throw new Error(`Missing font package: ${spec.package}`);
+  const installed = JSON.parse(readAbs(pkgJsonPath));
+  if (installed.version !== spec.version) {
+    throw new Error(`Unexpected ${spec.package} version ${installed.version}; expected ${spec.version}`);
+  }
+
+  for (const weight of spec.weights) {
+    const subsetFiles = spec.subsets.map(subset => path.join(pkgDir, `${subset}-${weight}.css`));
+    const cssFiles = subsetFiles.every(fs.existsSync)
+      ? subsetFiles
+      : [path.join(pkgDir, `${weight}.css`)];
+
+    for (const cssFile of cssFiles) {
+      if (!fs.existsSync(cssFile)) throw new Error(`Missing font CSS: ${cssFile}`);
+      fontCssParts.push(processFontCss(readAbs(cssFile), spec, pkgDir));
+    }
+  }
+}
+
+if (fontAssetPaths.size === 0) throw new Error('No local font assets were generated.');
+
+// 2) CSS: local font CSS + legacy stylesheet + extracted inline styles.
+const cssInput = [...fontCssParts, read('phase7.css'), ...inlineStyles].join('\n');
 const cssResult = new CleanCSS({ level: 2 }).minify(cssInput);
 if (cssResult.errors.length) throw new Error(cssResult.errors.join('\n'));
+if (/fonts\.googleapis\.com|fonts\.gstatic\.com/i.test(cssResult.styles)) {
+  throw new Error('Phase 8.4 failed: Google Fonts host remains in generated CSS.');
+}
 const cssName = `app.${sha(cssResult.styles)}.min.css`;
 write(path.join(ASSETS, cssName), cssResult.styles);
 
@@ -126,8 +225,7 @@ html = html.replace(
   `<link rel="stylesheet" href="./assets/${cssName}">`
 );
 
-// 2) Vendor bundle: exact versions formerly loaded from CDN, now self-hosted from npm.
-// Keep global API compatibility: docx, saveAs and Papa are provided by their UMD builds.
+// 3) Vendor bundle: exact browser libraries, self-hosted from npm.
 const vendorSpecs = [
   { name: 'docx', version: '8.5.0', file: 'node_modules/docx/build/index.umd.js' },
   { name: 'file-saver', version: '2.0.5', file: 'node_modules/file-saver/dist/FileSaver.min.js' },
@@ -150,7 +248,7 @@ if (/sourceMappingURL/i.test(vendorResult.code)) throw new Error('Unexpected sou
 const vendorName = `vendor.${sha(vendorResult.code)}.min.js`;
 write(path.join(ASSETS, vendorName), vendorResult.code);
 
-// 3) Application bundle: inline app logic + PWA registration + Phase 7 runtime.
+// 4) Application bundle: inline app logic + PWA registration + Phase 7 runtime.
 const jsInput = [
   ...inlineScripts,
   read('pwa-register.js'),
@@ -206,7 +304,8 @@ html = html.replace(
   `<script src="./assets/${vendorName}" defer></script><script src="./assets/${jsName}" defer></script></head>`
 );
 
-// 4) CSP: no external script hosts and no inline executable script hashes are required.
+// 5) CSP lockdown: static runtime is same-origin only. External access is limited
+// to application data/images that the current Facebook/Sheets workflow requires.
 html = rewriteCsp(html);
 
 html = await minifyHtml(html, {
@@ -225,37 +324,51 @@ html = await minifyHtml(html, {
   useShortDoctype: true
 });
 
-// 5) Hard production assertions.
-if (/<style\b/i.test(html)) throw new Error('Phase 8.3.2 failed: inline <style> remains.');
+// 6) Hard production assertions.
+if (/<style\b/i.test(html)) throw new Error('Phase 8.4 failed: inline <style> remains.');
 for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
   if (isExecutableInlineScript(match[1]) && match[2].trim()) {
-    throw new Error('Phase 8.3.2 failed: executable inline script remains.');
+    throw new Error('Phase 8.4 failed: executable inline script remains.');
   }
 }
 if (/phase7\.(?:css|js)|pwa-register\.js/i.test(html)) {
-  throw new Error('Phase 8.3.2 failed: legacy asset reference remains.');
+  throw new Error('Phase 8.4 failed: legacy asset reference remains.');
 }
-if (/cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com/i.test(html)) {
-  throw new Error('Phase 8.3.2 failed: CDN vendor host remains in production HTML/CSP.');
+if (/cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.googleapis\.com|fonts\.gstatic\.com/i.test(html)) {
+  throw new Error('Phase 8.4 failed: external static-runtime host remains in production HTML/CSP.');
 }
 if (/<script\b[^>]*\bsrc=["']https?:\/\//i.test(html)) {
-  throw new Error('Phase 8.3.2 failed: external script remains in production HTML.');
+  throw new Error('Phase 8.4 failed: external script remains in production HTML.');
+}
+if (/<link\b(?=[^>]*\brel=["'][^"']*stylesheet[^"']*["'])[^>]*\bhref=["']https?:\/\//i.test(html)) {
+  throw new Error('Phase 8.4 failed: external stylesheet remains in production HTML.');
 }
 if (!/<meta\b[^>]*name=["']mobile-web-app-capable["'][^>]*content=["']yes["']/i.test(html)) {
-  throw new Error('Phase 8.3.2 failed: mobile-web-app-capable metadata missing.');
+  throw new Error('Phase 8.4 failed: mobile-web-app-capable metadata missing.');
+}
+if (!/script-src(?:-elem)? 'self'/i.test(html) || !/script-src-attr 'none'/i.test(html)) {
+  throw new Error('Phase 8.4 failed: script CSP is not locked to self/none.');
+}
+if (!/font-src 'self'/i.test(html)) {
+  throw new Error('Phase 8.4 failed: font-src is not self-only.');
 }
 write(path.join(DIST, 'index.html'), html);
 
-// 6) Service Worker: precache generated vendor/app/CSS assets and rotate cache generation.
+// 7) Service Worker: precache generated runtime + local font assets and rotate cache.
+const fontCacheEntries = [...fontAssetPaths]
+  .sort()
+  .map(file => `coreUrl('./${file}')`)
+  .join(',\n  ');
+
 let sw = read('sw.js')
-  .replace(/const CACHE_VERSION = ['"][^'"]+['"];/, `const CACHE_VERSION = 'facebookreport-v8.3.2-${sha(html).slice(0, 8)}';`)
+  .replace(/const CACHE_VERSION = ['"][^'"]+['"];/, `const CACHE_VERSION = 'facebookreport-v8.4-${sha(html).slice(0, 8)}';`)
   .replace(
     /coreUrl\('\.\/pwa-register\.js'\),\s*coreUrl\('\.\/phase7\.css'\),\s*coreUrl\('\.\/phase7\.js'\)/m,
-    `coreUrl('./assets/${cssName}'),\n  coreUrl('./assets/${vendorName}'),\n  coreUrl('./assets/${jsName}')`
+    `coreUrl('./assets/${cssName}'),\n  coreUrl('./assets/${vendorName}'),\n  coreUrl('./assets/${jsName}'),\n  ${fontCacheEntries}`
   );
 
 if (/pwa-register\.js|phase7\.(?:css|js)/i.test(sw)) {
-  throw new Error('Phase 8.3.2 failed: service worker still references legacy assets.');
+  throw new Error('Phase 8.4 failed: service worker still references legacy assets.');
 }
 
 const swResult = await minifyJs(sw, {
@@ -267,15 +380,20 @@ if (!swResult.code) throw new Error('Terser produced no service worker.');
 if (/sourceMappingURL/i.test(swResult.code)) throw new Error('Unexpected sourceMappingURL in service worker.');
 write(path.join(DIST, 'sw.js'), swResult.code);
 
-// 7) Stable public files.
+// 8) Stable public files.
 for (const file of ['404.html', 'offline.html', 'manifest.webmanifest', 'favicon.svg', 'robots.txt', 'sitemap.xml', '.nojekyll']) {
   const source = path.join(ROOT, file);
   if (fs.existsSync(source)) fs.copyFileSync(source, path.join(DIST, file));
 }
 
-// 8) Third-party notices generated from the installed package licenses.
-const noticeSections = vendorSpecs.map(vendor => {
-  const dir = path.join(ROOT, 'node_modules', vendor.name);
+// 9) Third-party notices: runtime vendors + self-hosted fonts.
+const noticePackages = [
+  ...vendorSpecs.map(({ name, version }) => ({ name, version })),
+  ...fontSpecs.map(({ package: name, version }) => ({ name, version }))
+];
+
+const noticeSections = noticePackages.map(item => {
+  const dir = packageDir(item.name);
   const pkg = JSON.parse(readAbs(path.join(dir, 'package.json')));
   return [
     `${pkg.name} ${pkg.version}`,
@@ -289,9 +407,17 @@ write(
   `FacebookReport — third-party notices\nGenerated at build time.\n\n${noticeSections.join('\n\n' + '='.repeat(72) + '\n\n')}\n`
 );
 
-// 9) Production manifest.
+// 10) Production manifest. "Zero external runtime" means all executable,
+// stylesheet and font assets are local. External data/image origins remain explicit.
+const externalDataHosts = [
+  'https://docs.google.com',
+  'https://images.unsplash.com',
+  'https://*.fbcdn.net',
+  'https://*.googleusercontent.com'
+];
+
 const manifest = {
-  version: '8.3.2',
+  version: '8.4.0',
   generatedAt: new Date().toISOString(),
   sourceMaps: false,
   fullSourceExtraction: true,
@@ -299,23 +425,40 @@ const manifest = {
   executableInlineScripts: 0,
   obfuscated: true,
   vendorSelfHosted: true,
-  externalScriptHosts: [],
+  fontsSelfHosted: true,
+  zeroExternalStaticRuntime: true,
+  externalStaticRuntimeHosts: [],
+  externalDataHosts,
+  cspLockdown: true,
+  cspProfile: {
+    script: "self-only; script attributes none",
+    style: "self-only elements; unsafe-inline restricted to style attributes",
+    font: "self-only"
+  },
   vendors: vendorSpecs.map(({ name, version }) => ({ name, version })),
+  fonts: fontSpecs.map(({ package: name, family, version, weights, subsets }) => ({
+    name,
+    family,
+    version,
+    weights,
+    subsets
+  })),
   assets: {
     css: `assets/${cssName}`,
     vendor: `assets/${vendorName}`,
     js: `assets/${jsName}`,
+    fonts: [...fontAssetPaths].sort(),
     serviceWorker: 'sw.js'
   }
 };
 write(path.join(DIST, 'build-manifest.json'), JSON.stringify(manifest, null, 2));
 
-console.log(`Phase 8.3.2 build complete: ${path.relative(ROOT, DIST)}`);
+console.log(`Phase 8.4 build complete: ${path.relative(ROOT, DIST)}`);
 console.log(` - ${manifest.assets.css}`);
 console.log(` - ${manifest.assets.vendor}`);
 console.log(` - ${manifest.assets.js}`);
+console.log(` - local font files: ${manifest.assets.fonts.length}`);
 console.log(` - extracted inline styles: ${inlineStyles.length}`);
 console.log(` - extracted inline scripts: ${inlineScripts.length}`);
-console.log(' - vendor scripts: self-hosted');
-console.log(' - external script hosts: 0');
-console.log(' - source maps: disabled');
+console.log(' - external static runtime hosts: 0');
+console.log(' - CSP lockdown: enabled');
