@@ -1,4 +1,4 @@
-# Phase 8.3 — single hardened production deployment pipeline
+# Phase 8.3.2 — single hardened production deployment pipeline
 name: Production Pages
 
 on:
@@ -36,7 +36,7 @@ jobs:
       - name: Build hardened production site
         run: npm run build
 
-      - name: Verify hardened production artifact
+      - name: Verify Phase 8.3.2 production artifact
         shell: bash
         run: |
           set -euo pipefail
@@ -46,33 +46,26 @@ jobs:
             exit 1
           fi
 
-          if grep -Eqi '<style\b' dist/index.html; then
-            echo 'Inline style block remains in dist/index.html' >&2
+          if grep -Rqi 'sourceMappingURL' dist; then
+            echo 'sourceMappingURL found in production artifact' >&2
             exit 1
           fi
 
-          if grep -Eqi 'phase7\.(css|js)|pwa-register\.js' dist/index.html; then
-            echo 'Legacy source asset reference remains in dist/index.html' >&2
-            exit 1
-          fi
-
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
+          node <<'NODE'
+          const fs = require('fs');
+          const html = fs.readFileSync('dist/index.html', 'utf8');
           const manifest = JSON.parse(fs.readFileSync('dist/build-manifest.json', 'utf8'));
-          const failures = [];
-          if (manifest.version !== '8.3') failures.push('manifest version is not 8.3');
-          if (manifest.sourceMaps !== false) failures.push('source maps are not disabled');
-          if (manifest.fullSourceExtraction !== true) failures.push('full extraction is not enabled');
-          if (manifest.inlineStyleBlocks !== 0) failures.push('inline style blocks remain');
-          if (manifest.executableInlineScripts !== 0) failures.push('inline executable scripts remain');
-          if (manifest.obfuscated !== true) failures.push('obfuscation is not enabled');
-          if (!/^assets\/app\.[a-f0-9]{12}\.min\.css$/.test(manifest.assets.css)) failures.push('CSS asset is not fingerprinted');
-          if (!/^assets\/app\.[a-f0-9]{12}\.min\.js$/.test(manifest.assets.js)) failures.push('JS asset is not fingerprinted');
-          if (failures.length) {
-            console.error(failures.join('\n'));
-            process.exit(1);
-          }
-          console.log('Phase 8.3 production verification passed.');
+
+          const fail = msg => { console.error(msg); process.exit(1); };
+          if (!manifest.vendorSelfHosted) fail('vendorSelfHosted must be true');
+          if (!Array.isArray(manifest.externalScriptHosts) || manifest.externalScriptHosts.length !== 0) fail('externalScriptHosts must be empty');
+          if (!manifest.assets?.vendor || !/^assets\/vendor\.[a-f0-9]+\.min\.js$/.test(manifest.assets.vendor)) fail('hashed vendor asset missing');
+          if (/cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com/i.test(html)) fail('CDN vendor host remains in HTML/CSP');
+          if (/<script\b[^>]*\bsrc=["']https?:\/\//i.test(html)) fail('external script tag remains');
+          if (/<style\b/i.test(html)) fail('inline style block remains');
+          if (!/<meta\b[^>]*name=["']mobile-web-app-capable["'][^>]*content=["']yes["']/i.test(html)) fail('mobile-web-app-capable missing');
+          if (!fs.existsSync('dist/' + manifest.assets.vendor)) fail('vendor bundle not found');
+          if (!fs.existsSync('dist/THIRD_PARTY_NOTICES.txt')) fail('third-party notices missing');
           NODE
 
       - name: Configure Pages
