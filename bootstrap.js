@@ -2,11 +2,11 @@
   'use strict';
 
   const PARTS = [
-    '.parts/app00.b64',
-    '.parts/app01.b64',
-    '.parts/app02.b64',
-    '.parts/app03.b64',
-    '.parts/app04.b64'
+    'parts/app00.b64',
+    'parts/app01.b64',
+    'parts/app02.b64',
+    'parts/app03.b64',
+    'parts/app04.b64'
   ];
   const EXPECTED_SHA256 = 'fc2f44ea7dd9ae2937e9886135d87a55f9fa5ef74b541b6efb39f42d432d076d';
 
