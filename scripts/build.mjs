@@ -13,6 +13,8 @@ const ASSETS = path.join(DIST, 'assets');
 const read = file => fs.readFileSync(path.join(ROOT, file), 'utf8');
 const readAbs = file => fs.readFileSync(file, 'utf8');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 12);
+const sha256 = value => crypto.createHash('sha256').update(value).digest('hex');
+const fileSha256 = file => sha256(fs.readFileSync(file));
 const write = (file, content) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
@@ -290,7 +292,8 @@ const obfuscatedJs = JavaScriptObfuscator.obfuscate(jsResult.code, {
   stringArrayShuffle: true,
   stringArrayThreshold: 0.35,
   transformObjectKeys: false,
-  unicodeEscapeSequence: false
+  unicodeEscapeSequence: false,
+  seed: 850
 }).getObfuscatedCode();
 
 if (!obfuscatedJs) throw new Error('Obfuscator produced no application bundle.');
@@ -361,7 +364,7 @@ const fontCacheEntries = [...fontAssetPaths]
   .join(',\n  ');
 
 let sw = read('sw.js')
-  .replace(/const CACHE_VERSION = ['"][^'"]+['"];/, `const CACHE_VERSION = 'facebookreport-v8.4.1-${sha(html).slice(0, 8)}';`)
+  .replace(/const CACHE_VERSION = ['"][^'"]+['"];/, `const CACHE_VERSION = 'facebookreport-v8.5-${sha(html).slice(0, 8)}';`)
   // Phase 8.4.1: remove legacy CDN/Google Fonts hosts from the generated
   // service worker. Only the remote image cache host is still needed.
   .replace(
@@ -422,14 +425,32 @@ const externalDataHosts = [
   'https://*.googleusercontent.com'
 ];
 
+const assetFiles = {
+  css: `assets/${cssName}`,
+  vendor: `assets/${vendorName}`,
+  js: `assets/${jsName}`,
+  fonts: [...fontAssetPaths].sort(),
+  serviceWorker: 'sw.js'
+};
+
+const assetDigests = {};
+for (const file of [assetFiles.css, assetFiles.vendor, assetFiles.js, ...assetFiles.fonts, assetFiles.serviceWorker]) {
+  assetDigests[file] = fileSha256(path.join(DIST, file));
+}
+
 const manifest = {
-  version: '8.4.0',
-  generatedAt: new Date().toISOString(),
+  version: '8.5.0',
+  phase: 'Final Security Audit + Production Freeze',
+  productionFreeze: true,
+  reproducibleBuild: true,
+  sourceRevision: process.env.GITHUB_SHA || null,
+  nodeMajor: 22,
   sourceMaps: false,
   fullSourceExtraction: true,
   inlineStyleBlocks: 0,
   executableInlineScripts: 0,
   obfuscated: true,
+  obfuscationSeed: 850,
   vendorSelfHosted: true,
   fontsSelfHosted: true,
   zeroExternalStaticRuntime: true,
@@ -449,17 +470,29 @@ const manifest = {
     weights,
     subsets
   })),
-  assets: {
-    css: `assets/${cssName}`,
-    vendor: `assets/${vendorName}`,
-    js: `assets/${jsName}`,
-    fonts: [...fontAssetPaths].sort(),
-    serviceWorker: 'sw.js'
-  }
+  assets: assetFiles,
+  assetDigests
 };
 write(path.join(DIST, 'build-manifest.json'), JSON.stringify(manifest, null, 2));
 
-console.log(`Phase 8.4 build complete: ${path.relative(ROOT, DIST)}`);
+const filesForChecksums = [];
+const walk = dir => {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const absolute = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(absolute);
+    else if (entry.name !== 'SHA256SUMS.txt') filesForChecksums.push(absolute);
+  }
+};
+walk(DIST);
+filesForChecksums.sort((a, b) => a.localeCompare(b));
+
+const checksumLines = filesForChecksums.map(file => {
+  const relative = path.relative(DIST, file).split(path.sep).join('/');
+  return `${fileSha256(file)}  ${relative}`;
+});
+write(path.join(DIST, 'SHA256SUMS.txt'), checksumLines.join('\n') + '\n');
+
+console.log(`Phase 8.5 build complete: ${path.relative(ROOT, DIST)}`);
 console.log(` - ${manifest.assets.css}`);
 console.log(` - ${manifest.assets.vendor}`);
 console.log(` - ${manifest.assets.js}`);
@@ -468,3 +501,5 @@ console.log(` - extracted inline styles: ${inlineStyles.length}`);
 console.log(` - extracted inline scripts: ${inlineScripts.length}`);
 console.log(' - external static runtime hosts: 0');
 console.log(' - CSP lockdown: enabled');
+console.log(' - production freeze: enabled');
+console.log(' - deterministic obfuscation seed: 850');
