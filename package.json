@@ -1,7 +1,7 @@
 {
   "name": "facebook-report",
   "private": true,
-  "version": "8.3.0",
+  "version": "8.3.2",
   "type": "module",
   "scripts": {
     "audit": "node scripts/audit-secrets.mjs",
@@ -10,8 +10,11 @@
   },
   "devDependencies": {
     "clean-css": "^5.3.3",
+    "docx": "8.5.0",
+    "file-saver": "2.0.5",
     "html-minifier-terser": "^7.2.0",
     "javascript-obfuscator": "^4.1.1",
+    "papaparse": "5.4.1",
     "terser": "^5.44.0"
   }
 }
