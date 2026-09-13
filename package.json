@@ -1,7 +1,7 @@
 {
   "name": "facebook-report",
   "private": true,
-  "version": "8.3.2",
+  "version": "8.4.0",
   "type": "module",
   "scripts": {
     "audit": "node scripts/audit-secrets.mjs",
@@ -9,6 +9,8 @@
     "verify": "npm run audit && npm run build"
   },
   "devDependencies": {
+    "@fontsource/prompt": "5.3.0",
+    "@fontsource/sarabun": "5.3.0",
     "clean-css": "^5.3.3",
     "docx": "8.5.0",
     "file-saver": "2.0.5",
