@@ -361,7 +361,13 @@ const fontCacheEntries = [...fontAssetPaths]
   .join(',\n  ');
 
 let sw = read('sw.js')
-  .replace(/const CACHE_VERSION = ['"][^'"]+['"];/, `const CACHE_VERSION = 'facebookreport-v8.4-${sha(html).slice(0, 8)}';`)
+  .replace(/const CACHE_VERSION = ['"][^'"]+['"];/, `const CACHE_VERSION = 'facebookreport-v8.4.1-${sha(html).slice(0, 8)}';`)
+  // Phase 8.4.1: remove legacy CDN/Google Fonts hosts from the generated
+  // service worker. Only the remote image cache host is still needed.
+  .replace(
+    /const STATIC_REMOTE_HOSTS\s*=\s*new Set\(\[[\s\S]*?\]\);/m,
+    `const STATIC_REMOTE_HOSTS = new Set(['images.unsplash.com']);`
+  )
   .replace(
     /coreUrl\('\.\/pwa-register\.js'\),\s*coreUrl\('\.\/phase7\.css'\),\s*coreUrl\('\.\/phase7\.js'\)/m,
     `coreUrl('./assets/${cssName}'),\n  coreUrl('./assets/${vendorName}'),\n  coreUrl('./assets/${jsName}'),\n  ${fontCacheEntries}`
