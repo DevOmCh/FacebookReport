@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">โรงเรียนวัดร้องอ้อ</title>
+  <desc id="desc">ไอคอนแดชบอร์ดกิจกรรม</desc>
+  <rect width="512" height="512" rx="120" fill="#08111f"/>
+  <rect x="54" y="54" width="404" height="404" rx="100" fill="#f59e0b"/>
+  <rect x="82" y="82" width="348" height="348" rx="78" fill="#0b1728"/>
+  <path d="M133 171h55l36 159 39-119h46l39 119 36-159h55l-61 208h-51l-41-119-41 119h-51z" fill="#f8fafc"/>
+</svg>

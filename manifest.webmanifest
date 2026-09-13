@@ -1,0 +1,23 @@
+{
+  "name": "แดชบอร์ดกิจกรรม โรงเรียนวัดร้องอ้อ",
+  "short_name": "กิจกรรม ร้องอ้อ",
+  "description": "แดชบอร์ดสำหรับติดตาม ค้นหา สรุป และจัดทำรายงานกิจกรรมของโรงเรียนวัดร้องอ้อ",
+  "lang": "th",
+  "dir": "ltr",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#08111f",
+  "theme_color": "#08111f",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
