@@ -1,0 +1,423 @@
+name: Phase 7 Production UX Migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase7-production-ux.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch index for Phase 7
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          html = p.read_text(encoding='utf-8')
+          css = '<link rel="stylesheet" href="./phase7.css">'
+          js = '<script src="./phase7.js" defer></script>'
+          if css not in html:
+              marker = '<link rel="manifest" href="./manifest.webmanifest">'
+              if marker not in html: raise SystemExit('manifest marker not found')
+              html = html.replace(marker, marker + '\n' + css, 1)
+          if js not in html:
+              marker = '<script src="./pwa-register.js" defer></script>'
+              if marker not in html: raise SystemExit('pwa-register marker not found')
+              html = html.replace(marker, marker + '\n' + js, 1)
+          p.write_text(html, encoding='utf-8')
+          PY
+
+      - name: Create Phase 7 UI styles
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > phase7.css <<'EOF'
+          .p7-shell{position:fixed;right:18px;bottom:18px;z-index:2147482000;font-family:Sarabun,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f8fafc}.p7-fab{display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.14);background:#0b1728;color:#f8fafc;border-radius:999px;padding:10px 14px;font:700 14px/1 inherit;box-shadow:0 14px 40px rgba(0,0,0,.32);cursor:pointer}.p7-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.14)}.p7-shell.is-offline .p7-dot{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.16)}.p7-panel{position:absolute;right:0;bottom:52px;width:min(390px,calc(100vw - 28px));max-height:min(74vh,620px);overflow:auto;background:#08111f;border:1px solid #263244;border-radius:20px;box-shadow:0 24px 80px rgba(0,0,0,.44);padding:18px;display:none}.p7-panel[open]{display:block}.p7-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.p7-title{font:800 18px/1.2 Prompt,Sarabun,sans-serif;margin:0}.p7-close{border:0;background:transparent;color:#cbd5e1;font-size:24px;line-height:1;cursor:pointer}.p7-status{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #263244;border-radius:14px;background:#0b1728;margin-bottom:10px}.p7-label{color:#94a3b8;font-size:13px}.p7-value{font-weight:800;text-align:right}.p7-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.p7-card{background:#0b1728;border:1px solid #263244;border-radius:14px;padding:12px}.p7-card strong{display:block;font:800 20px/1.1 Prompt,Sarabun,sans-serif;margin-top:3px}.p7-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.p7-btn{border:0;border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer;background:#f59e0b;color:#08111f}.p7-btn.secondary{background:#1e293b;color:#f8fafc}.p7-btn[hidden]{display:none}.p7-banner{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:2147482001;display:none;align-items:center;gap:10px;max-width:min(760px,calc(100vw - 28px));padding:10px 12px;border-radius:999px;background:#0b1728;color:#f8fafc;border:1px solid #334155;box-shadow:0 10px 34px rgba(0,0,0,.28);font:700 14px/1.2 Sarabun,sans-serif}.p7-banner.show{display:flex}.p7-banner button{border:0;background:#f59e0b;color:#08111f;border-radius:999px;padding:7px 10px;font-weight:800;cursor:pointer}.p7-log{margin-top:12px;border-top:1px solid #263244;padding-top:10px}.p7-log h3{font-size:14px;margin:0 0 8px}.p7-log-list{margin:0;padding-left:18px;color:#cbd5e1;font-size:12px;line-height:1.55;max-height:150px;overflow:auto}.p7-muted{color:#94a3b8;font-size:12px;margin-top:10px}.p7-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:#132033;color:#cbd5e1;font-size:12px}.p7-badge.ok{color:#bbf7d0}.p7-badge.warn{color:#fde68a}.p7-badge.bad{color:#fecaca}@media(max-width:640px){.p7-shell{right:12px;bottom:12px}.p7-fab span:last-child{display:none}.p7-panel{right:0;bottom:50px;width:calc(100vw - 24px)}.p7-grid{grid-template-columns:1fr 1fr}.p7-banner{top:8px;border-radius:16px}}@media(prefers-reduced-motion:reduce){.p7-shell *,.p7-banner *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+          EOF
+
+      - name: Create Phase 7 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > phase7.js <<'EOF'
+          (() => {
+            'use strict';
+
+            const metrics = {
+              errors: 0,
+              resourceErrors: 0,
+              longTasks: 0,
+              lcp: null,
+              cls: 0,
+              nav: null,
+              installAvailable: false,
+              updateReady: false
+            };
+            const logs = [];
+            let deferredInstallPrompt = null;
+            let updateRegistration = null;
+
+            const log = (type, message) => {
+              const item = { type, message: String(message).slice(0, 180), at: new Date().toLocaleTimeString('th-TH') };
+              logs.unshift(item);
+              logs.splice(12);
+              render();
+            };
+
+            function buildUI() {
+              const banner = document.createElement('div');
+              banner.className = 'p7-banner';
+              banner.id = 'p7Banner';
+              banner.setAttribute('role', 'status');
+              banner.setAttribute('aria-live', 'polite');
+
+              const shell = document.createElement('div');
+              shell.className = 'p7-shell';
+              shell.id = 'p7Shell';
+              shell.innerHTML = `
+                <section class="p7-panel" id="p7Panel" aria-label="System Health">
+                  <div class="p7-head"><h2 class="p7-title">System Health</h2><button class="p7-close" id="p7Close" type="button" aria-label="ปิด">×</button></div>
+                  <div class="p7-status"><span><span class="p7-label">เครือข่าย</span><br><span id="p7Network" class="p7-badge">—</span></span><span class="p7-value" id="p7Connection">—</span></div>
+                  <div class="p7-status"><span><span class="p7-label">Service Worker</span><br><span id="p7Sw" class="p7-badge">กำลังตรวจสอบ</span></span><span class="p7-value" id="p7Version">Phase 7</span></div>
+                  <div class="p7-grid">
+                    <div class="p7-card"><span class="p7-label">Page load</span><strong id="p7Load">—</strong></div>
+                    <div class="p7-card"><span class="p7-label">LCP</span><strong id="p7Lcp">—</strong></div>
+                    <div class="p7-card"><span class="p7-label">CLS</span><strong id="p7Cls">0.000</strong></div>
+                    <div class="p7-card"><span class="p7-label">Errors</span><strong id="p7Errors">0</strong></div>
+                  </div>
+                  <div class="p7-actions">
+                    <button class="p7-btn" id="p7Install" type="button" hidden>ติดตั้งแอป</button>
+                    <button class="p7-btn" id="p7Update" type="button" hidden>อัปเดตตอนนี้</button>
+                    <button class="p7-btn secondary" id="p7Check" type="button">ตรวจอัปเดต</button>
+                    <button class="p7-btn secondary" id="p7Clear" type="button">ล้าง Log</button>
+                  </div>
+                  <div class="p7-log"><h3>เหตุการณ์ล่าสุด</h3><ol class="p7-log-list" id="p7Logs"><li>ยังไม่มีเหตุการณ์ผิดปกติ</li></ol></div>
+                  <p class="p7-muted">Monitoring ทำงานเฉพาะใน browser นี้ และไม่ส่งข้อมูลออกไปยัง analytics ภายนอก</p>
+                </section>
+                <button class="p7-fab" id="p7Fab" type="button" aria-expanded="false" aria-controls="p7Panel"><span class="p7-dot" aria-hidden="true"></span><span>System Health</span></button>`;
+
+              document.body.append(banner, shell);
+
+              const panel = document.getElementById('p7Panel');
+              const fab = document.getElementById('p7Fab');
+              const close = document.getElementById('p7Close');
+              const toggle = open => {
+                if (open) panel.setAttribute('open', ''); else panel.removeAttribute('open');
+                fab.setAttribute('aria-expanded', String(open));
+              };
+              fab.addEventListener('click', () => toggle(!panel.hasAttribute('open')));
+              close.addEventListener('click', () => toggle(false));
+              document.addEventListener('keydown', e => { if (e.key === 'Escape') toggle(false); });
+
+              document.getElementById('p7Install').addEventListener('click', installApp);
+              document.getElementById('p7Update').addEventListener('click', applyUpdate);
+              document.getElementById('p7Check').addEventListener('click', checkUpdate);
+              document.getElementById('p7Clear').addEventListener('click', () => { logs.length = 0; render(); });
+              render();
+            }
+
+            function setBanner(message, actionLabel, action) {
+              const banner = document.getElementById('p7Banner');
+              if (!banner) return;
+              banner.replaceChildren();
+              const text = document.createElement('span');
+              text.textContent = message;
+              banner.append(text);
+              if (actionLabel && action) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = actionLabel;
+                btn.addEventListener('click', action, { once: true });
+                banner.append(btn);
+              }
+              banner.classList.add('show');
+            }
+
+            function clearBanner() {
+              document.getElementById('p7Banner')?.classList.remove('show');
+            }
+
+            function networkLabel() {
+              const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+              if (!c) return navigator.onLine ? 'Online' : 'Offline';
+              return navigator.onLine ? `${c.effectiveType || 'online'}${c.downlink ? ` · ${c.downlink} Mbps` : ''}` : 'Offline';
+            }
+
+            function render() {
+              const shell = document.getElementById('p7Shell');
+              if (!shell) return;
+              const online = navigator.onLine;
+              shell.classList.toggle('is-offline', !online);
+              const network = document.getElementById('p7Network');
+              network.textContent = online ? 'ออนไลน์' : 'ออฟไลน์';
+              network.className = `p7-badge ${online ? 'ok' : 'warn'}`;
+              document.getElementById('p7Connection').textContent = networkLabel();
+              document.getElementById('p7Load').textContent = metrics.nav ? `${Math.round(metrics.nav)} ms` : '—';
+              document.getElementById('p7Lcp').textContent = metrics.lcp ? `${Math.round(metrics.lcp)} ms` : '—';
+              document.getElementById('p7Cls').textContent = metrics.cls.toFixed(3);
+              document.getElementById('p7Errors').textContent = String(metrics.errors + metrics.resourceErrors);
+              document.getElementById('p7Install').hidden = !metrics.installAvailable;
+              document.getElementById('p7Update').hidden = !metrics.updateReady;
+              const list = document.getElementById('p7Logs');
+              if (logs.length) {
+                list.replaceChildren(...logs.map(item => {
+                  const li = document.createElement('li');
+                  li.textContent = `[${item.at}] ${item.message}`;
+                  return li;
+                }));
+              } else {
+                const li = document.createElement('li');
+                li.textContent = 'ยังไม่มีเหตุการณ์ผิดปกติ';
+                list.replaceChildren(li);
+              }
+            }
+
+            async function installApp() {
+              if (!deferredInstallPrompt) return;
+              deferredInstallPrompt.prompt();
+              const choice = await deferredInstallPrompt.userChoice.catch(() => null);
+              log('install', choice?.outcome === 'accepted' ? 'เริ่มติดตั้งแอปแล้ว' : 'ยกเลิกการติดตั้งแอป');
+              deferredInstallPrompt = null;
+              metrics.installAvailable = false;
+              render();
+            }
+
+            async function applyUpdate() {
+              const worker = updateRegistration?.waiting;
+              if (!worker) return;
+              worker.postMessage({ type: 'SKIP_WAITING' });
+              setBanner('กำลังเปิดเวอร์ชันใหม่…');
+            }
+
+            async function checkUpdate() {
+              if (!('serviceWorker' in navigator)) return;
+              const registration = updateRegistration || await navigator.serviceWorker.getRegistration('./');
+              if (!registration) { log('sw', 'ยังไม่มี Service Worker registration'); return; }
+              try {
+                await registration.update();
+                log('sw', registration.waiting ? 'พบเวอร์ชันใหม่พร้อมอัปเดต' : 'ตรวจแล้ว เป็นเวอร์ชันล่าสุด');
+              } catch (error) {
+                log('sw', `ตรวจอัปเดตไม่สำเร็จ: ${error.message || error}`);
+              }
+            }
+
+            function observePerformance() {
+              try {
+                const nav = performance.getEntriesByType('navigation')[0];
+                if (nav) metrics.nav = nav.loadEventEnd || nav.duration;
+              } catch (_) {}
+
+              if ('PerformanceObserver' in window) {
+                try {
+                  new PerformanceObserver(list => {
+                    const entries = list.getEntries();
+                    const last = entries[entries.length - 1];
+                    if (last) { metrics.lcp = last.startTime; render(); }
+                  }).observe({ type: 'largest-contentful-paint', buffered: true });
+                } catch (_) {}
+                try {
+                  new PerformanceObserver(list => {
+                    for (const e of list.getEntries()) if (!e.hadRecentInput) metrics.cls += e.value;
+                    render();
+                  }).observe({ type: 'layout-shift', buffered: true });
+                } catch (_) {}
+                try {
+                  new PerformanceObserver(list => {
+                    metrics.longTasks += list.getEntries().length;
+                    if (metrics.longTasks === 1) log('perf', 'พบ long task บน main thread');
+                  }).observe({ type: 'longtask', buffered: true });
+                } catch (_) {}
+              }
+              render();
+            }
+
+            function observeErrors() {
+              window.addEventListener('error', event => {
+                if (event.target && event.target !== window) {
+                  metrics.resourceErrors += 1;
+                  const src = event.target.src || event.target.href || event.target.tagName;
+                  log('resource', `โหลด resource ไม่สำเร็จ: ${src}`);
+                } else {
+                  metrics.errors += 1;
+                  log('error', event.message || 'JavaScript error');
+                }
+              }, true);
+              window.addEventListener('unhandledrejection', event => {
+                metrics.errors += 1;
+                const reason = event.reason?.message || event.reason || 'Unhandled promise rejection';
+                log('promise', reason);
+              });
+            }
+
+            function observeNetwork() {
+              window.addEventListener('online', () => { clearBanner(); log('network', 'กลับมาออนไลน์แล้ว'); render(); });
+              window.addEventListener('offline', () => { setBanner('ขณะนี้ออฟไลน์ ข้อมูล Google Sheets อาจไม่อัปเดต'); log('network', 'อุปกรณ์ออฟไลน์'); render(); });
+              const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+              c?.addEventListener?.('change', render);
+              if (!navigator.onLine) setBanner('ขณะนี้ออฟไลน์ ข้อมูล Google Sheets อาจไม่อัปเดต');
+            }
+
+            window.addEventListener('beforeinstallprompt', event => {
+              event.preventDefault();
+              deferredInstallPrompt = event;
+              metrics.installAvailable = true;
+              setBanner('ติดตั้ง Dashboard เป็นแอปบนอุปกรณ์นี้ได้', 'ติดตั้ง', installApp);
+              render();
+            });
+            window.addEventListener('appinstalled', () => {
+              deferredInstallPrompt = null;
+              metrics.installAvailable = false;
+              clearBanner();
+              log('install', 'ติดตั้งแอปสำเร็จ');
+            });
+
+            window.addEventListener('facebookreport:sw-ready', event => {
+              updateRegistration = event.detail?.registration || null;
+              const sw = document.getElementById('p7Sw');
+              if (sw) { sw.textContent = 'พร้อมใช้งาน'; sw.className = 'p7-badge ok'; }
+              render();
+            });
+            window.addEventListener('facebookreport:update-ready', event => {
+              updateRegistration = event.detail?.registration || updateRegistration;
+              metrics.updateReady = true;
+              setBanner('มี Dashboard เวอร์ชันใหม่พร้อมใช้งาน', 'อัปเดต', applyUpdate);
+              log('update', 'พบเวอร์ชันใหม่');
+              render();
+            });
+
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (metrics.updateReady) location.reload();
+              });
+            }
+
+            const init = () => {
+              buildUI();
+              observeErrors();
+              observeNetwork();
+              observePerformance();
+            };
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true }); else init();
+          })();
+          EOF
+
+      - name: Upgrade PWA update events
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > pwa-register.js <<'EOF'
+          (() => {
+            'use strict';
+            if (!('serviceWorker' in navigator)) return;
+
+            const emit = (name, registration) => {
+              window.dispatchEvent(new CustomEvent(name, { detail: { registration } }));
+            };
+
+            window.addEventListener('load', async () => {
+              try {
+                const registration = await navigator.serviceWorker.register('./sw.js', {
+                  scope: './',
+                  updateViaCache: 'none'
+                });
+                emit('facebookreport:sw-ready', registration);
+
+                if (registration.waiting) emit('facebookreport:update-ready', registration);
+
+                registration.addEventListener('updatefound', () => {
+                  const worker = registration.installing;
+                  if (!worker) return;
+                  worker.addEventListener('statechange', () => {
+                    if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                      emit('facebookreport:update-ready', registration);
+                    }
+                  });
+                });
+
+                registration.update().catch(() => {});
+              } catch (error) {
+                console.warn('FacebookReport: ลงทะเบียน Service Worker ไม่สำเร็จ', error);
+                window.dispatchEvent(new CustomEvent('facebookreport:sw-error', { detail: { message: String(error?.message || error) } }));
+              }
+            }, { once: true });
+          })();
+          EOF
+
+      - name: Upgrade service worker cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('sw.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("facebookreport-v6-20260914", "facebookreport-v7-20260914", 1)
+          if "coreUrl('./phase7.css')" not in s:
+              s = s.replace("coreUrl('./pwa-register.js')", "coreUrl('./pwa-register.js'),\n  coreUrl('./phase7.css'),\n  coreUrl('./phase7.js')", 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Update README
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >> README.md <<'EOF'
+
+          ## Phase 7 — Production UX & Monitoring
+
+          - Install App UX ผ่าน `beforeinstallprompt` เมื่อ browser รองรับ
+          - แจ้งเตือนเมื่อ Service Worker พบเวอร์ชันใหม่ พร้อมปุ่มอัปเดตทันที
+          - Network status แสดง online/offline และ connection hint เมื่อ browser ให้ข้อมูล
+          - System Health panel แสดง page load, LCP, CLS, JavaScript/resource errors และเหตุการณ์ล่าสุด
+          - Monitoring เป็น local-only: ไม่มีการส่ง telemetry ไปยังบริการ analytics ภายนอก
+          EOF
+
+      - name: Validate Phase 7
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check phase7.js
+          node --check pwa-register.js
+          node --check sw.js
+          python3 - <<'PY'
+          from pathlib import Path
+          html = Path('index.html').read_text(encoding='utf-8')
+          checks = [
+            '<link rel="stylesheet" href="./phase7.css">',
+            '<script src="./phase7.js" defer></script>',
+            '<script src="./pwa-register.js" defer></script>',
+            "worker-src 'self'",
+            'integrity="sha384-4xaIisuLEy2lo2HkB2C4rEf7v8jbTb2kuogX6TkuEt9feTWKBSFSOzsqNNbV+sKh"',
+            'integrity="sha384-PlRSzpewlarQuj5alIadXwjNUX+2eNMKwr0f07ShWYLy8B6TjEbm7ZlcN/ScSbwy"',
+            'integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ=="'
+          ]
+          missing = [x for x in checks if x not in html]
+          if missing: raise SystemExit('Missing: ' + ', '.join(missing))
+          print('Phase 7 HTML validation passed')
+          PY
+          grep -q "facebookreport-v7-20260914" sw.js
+          grep -q "phase7.js" sw.js
+          grep -q "beforeinstallprompt" phase7.js
+          grep -q "facebookreport:update-ready" phase7.js
+
+      - name: Commit Phase 7
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html phase7.css phase7.js pwa-register.js sw.js README.md
+          git commit -m 'feat: Phase 7 install update network and monitoring UX'
+          git push origin HEAD:main
