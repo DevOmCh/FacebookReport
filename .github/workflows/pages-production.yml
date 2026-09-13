@@ -1,4 +1,4 @@
-# Phase 8.4 — zero external static runtime + CSP lockdown
+# Phase 8.5 — final security audit + production freeze
 name: Production Pages
 
 on:
@@ -27,67 +27,48 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install build dependencies
-        run: npm install --no-audit --no-fund
+      - name: Verify frozen direct dependencies
+        shell: bash
+        run: |
+          node <<'NODE'
+          const pkg = require('./package.json');
+          const fail = msg => { console.error(msg); process.exit(1); };
+          if (pkg.version !== '8.5.0') fail('package version must be 8.5.0');
+          if (pkg.engines?.node !== '22.x') fail('Node runtime must be frozen to 22.x');
+          for (const [name, version] of Object.entries(pkg.devDependencies || {})) {
+            if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+              fail(`dependency ${name} is not pinned to an exact version: ${version}`);
+            }
+          }
+          NODE
+
+      - name: Install frozen build dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Audit critical npm vulnerabilities
+        run: npm audit --audit-level=critical
 
       - name: Audit browser source for secrets
         run: npm run audit
 
-      - name: Build hardened production site
+      - name: Build frozen production site
         run: npm run build
 
-      - name: Verify Phase 8.4 production artifact
+      - name: Final security audit
+        run: npm run security:final
+
+      - name: Verify reproducible production build
         shell: bash
         run: |
           set -euo pipefail
-
-          if find dist -type f \( -name '*.map' -o -name '*.ts' -o -name '*.scss' \) | grep -q .; then
-            echo 'Forbidden development artifacts found in dist/' >&2
+          rm -rf /tmp/facebookreport-dist-first
+          cp -a dist /tmp/facebookreport-dist-first
+          npm run build
+          npm run security:final
+          if ! diff -qr /tmp/facebookreport-dist-first dist; then
+            echo 'Production build is not reproducible from the same source/dependency set.' >&2
             exit 1
           fi
-
-          if grep -Rqi 'sourceMappingURL' dist; then
-            echo 'sourceMappingURL found in production artifact' >&2
-            exit 1
-          fi
-
-          if grep -RqiE 'fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com' dist; then
-            echo 'External static-runtime host found in production artifact' >&2
-            exit 1
-          fi
-
-          node <<'NODE'
-          const fs = require('fs');
-          const html = fs.readFileSync('dist/index.html', 'utf8');
-          const manifest = JSON.parse(fs.readFileSync('dist/build-manifest.json', 'utf8'));
-
-          const fail = msg => { console.error(msg); process.exit(1); };
-          if (manifest.version !== '8.4.0') fail('unexpected manifest version');
-          if (!manifest.vendorSelfHosted) fail('vendorSelfHosted must be true');
-          if (!manifest.fontsSelfHosted) fail('fontsSelfHosted must be true');
-          if (!manifest.zeroExternalStaticRuntime) fail('zeroExternalStaticRuntime must be true');
-          if (!manifest.cspLockdown) fail('cspLockdown must be true');
-          if (!Array.isArray(manifest.externalStaticRuntimeHosts) || manifest.externalStaticRuntimeHosts.length !== 0) fail('externalStaticRuntimeHosts must be empty');
-          if (!manifest.assets?.vendor || !/^assets\/vendor\.[a-f0-9]+\.min\.js$/.test(manifest.assets.vendor)) fail('hashed vendor asset missing');
-          if (!manifest.assets?.js || !/^assets\/app\.[a-f0-9]+\.min\.js$/.test(manifest.assets.js)) fail('hashed app JS missing');
-          if (!manifest.assets?.css || !/^assets\/app\.[a-f0-9]+\.min\.css$/.test(manifest.assets.css)) fail('hashed app CSS missing');
-          if (!Array.isArray(manifest.assets?.fonts) || manifest.assets.fonts.length === 0) fail('local font assets missing');
-
-          if (/<script\b[^>]*\bsrc=["']https?:\/\//i.test(html)) fail('external script tag remains');
-          if (/<link\b(?=[^>]*\brel=["'][^"']*stylesheet[^"']*["'])[^>]*\bhref=["']https?:\/\//i.test(html)) fail('external stylesheet remains');
-          if (/<style\b/i.test(html)) fail('inline style block remains');
-          if (!/script-src(?:-elem)? 'self'/i.test(html)) fail('script CSP not self-only');
-          if (!/script-src-attr 'none'/i.test(html)) fail('script-src-attr must be none');
-          if (!/font-src 'self'/i.test(html)) fail('font-src must be self-only');
-          if (!/style-src-elem 'self'/i.test(html)) fail('style-src-elem must be self-only');
-          if (!/style-src-attr 'unsafe-inline'/i.test(html)) fail('style-src-attr compatibility policy missing');
-          if (!/<meta\b[^>]*name=["']mobile-web-app-capable["'][^>]*content=["']yes["']/i.test(html)) fail('mobile-web-app-capable missing');
-
-          for (const file of [manifest.assets.vendor, manifest.assets.js, manifest.assets.css, ...manifest.assets.fonts]) {
-            if (!fs.existsSync('dist/' + file)) fail('missing production asset: ' + file);
-          }
-          if (!fs.existsSync('dist/THIRD_PARTY_NOTICES.txt')) fail('third-party notices missing');
-          NODE
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
