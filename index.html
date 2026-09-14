@@ -2845,7 +2845,8 @@
   @media (prefers-reduced-motion: reduce) {
     .hero-bg-media img,
     .hero-feature-image img,
-    .hero-slider-dot { transition: none !important; }
+    .hero-slider-dot,
+    .hero-feature-link { transition: none !important; }
   }
 
 
@@ -2855,9 +2856,9 @@
      Keep every slide footprint stable regardless of text length.
      ============================================================ */
   .hero-feature {
-    height: 410px !important;
-    min-height: 410px !important;
-    max-height: 410px !important;
+    height: 578px !important;
+    min-height: 578px !important;
+    max-height: 578px !important;
     overflow: hidden;
   }
 
@@ -2868,9 +2869,11 @@
 
   .hero-slide-content {
     flex: 1 1 auto;
+    width: 100%;
     min-height: 0;
+    min-width: 0;
     display: grid;
-    grid-template-rows: 34px 94px 104px 30px;
+    grid-template-rows: 32px 64px auto 36px;
     align-content: start;
   }
 
@@ -2885,33 +2888,61 @@
   .hero-feature h2,
   #heroLatestTitle {
     margin: 0 !important;
-    height: 94px;
-    max-height: 94px;
+    height: 64px;
+    max-height: 64px;
     overflow: hidden;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
+    width: 100%;
+    min-width: 0;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    font-size: clamp(20px, 1.85vw, 24px) !important;
+    line-height: 1.34 !important;
+    letter-spacing: -.015em !important;
   }
 
   .hero-feature-image {
     position: relative;
     margin: 8px 0 0;
-    height: 96px;
-    max-height: 96px;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    isolation: isolate;
+    aspect-ratio: 4 / 3;
     overflow: hidden;
     border: 1px solid rgba(169,198,229,.18);
-    border-radius: 12px;
+    border-radius: 14px;
     background: rgba(4,13,24,.58);
   }
 
   .hero-feature-image img {
-    width: 100%;
-    height: 100%;
     display: block;
-    object-fit: cover;
     opacity: 0;
     transition: opacity .22s ease;
+  }
+
+  .hero-feature-image-backdrop {
+    position: absolute;
+    inset: -18px;
+    z-index: 0;
+    width: calc(100% + 36px);
+    height: calc(100% + 36px);
+    object-fit: cover;
+    filter: blur(16px) saturate(.72) brightness(.58);
+    transform: scale(1.08);
+  }
+
+  .hero-feature-image-main {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 18px rgba(0,0,0,.30));
   }
 
   .hero-feature-image img.is-visible { opacity: 1; }
@@ -2925,12 +2956,38 @@
     font: 600 12px/1.4 "Sarabun", sans-serif;
   }
 
+  .hero-feature-image-empty[hidden] { display: none; }
+
   .hero-feature-link {
     align-self: start;
+    justify-self: start;
+    min-height: 30px;
     max-width: 100%;
+    margin-top: 5px;
+    padding: 5px 10px !important;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    border: 1px solid rgba(255,177,47,.42) !important;
+    border-radius: 9px;
+    background: rgba(255,122,24,.10);
+    color: #ffd8b5 !important;
+    font: 700 12px/1.2 "Sarabun", sans-serif;
+    transition: color .18s ease, background .18s ease, border-color .18s ease, transform .18s ease;
+  }
+
+  .hero-feature-link:hover {
+    border-color: transparent !important;
+    background: linear-gradient(135deg, var(--fx-orange), var(--fx-orange-2));
+    color: #1b0d02 !important;
+    transform: translateY(-1px);
+  }
+
+  .hero-feature-link:active { transform: translateY(0); }
+
+  .hero-feature-link:focus-visible {
+    outline: 3px solid rgba(255,255,255,.92);
+    outline-offset: 3px;
   }
 
   .hero-slider-nav {
@@ -2942,33 +2999,29 @@
 
   @media (max-width: 720px) {
     .hero-feature {
-      height: 390px !important;
-      min-height: 390px !important;
-      max-height: 390px !important;
+      height: 574px !important;
+      min-height: 574px !important;
+      max-height: 574px !important;
     }
 
     .hero-slide-content {
-      grid-template-rows: 32px 84px 96px 30px;
+      grid-template-rows: 30px 58px auto 36px;
     }
 
     .hero-feature h2,
     #heroLatestTitle {
-      height: 84px;
-      max-height: 84px;
-      font-size: clamp(22px, 7vw, 30px) !important;
+      height: 58px;
+      max-height: 58px;
+      font-size: clamp(19px, 4.8vw, 21px) !important;
     }
 
-    .hero-feature-image {
-      height: 88px;
-      max-height: 88px;
-    }
   }
 
   @media (max-width: 480px) {
     .hero-feature {
-      height: 372px !important;
-      min-height: 372px !important;
-      max-height: 372px !important;
+      height: 516px !important;
+      min-height: 516px !important;
+      max-height: 516px !important;
     }
 
     .hero-feature-top {
@@ -2976,20 +3029,17 @@
     }
 
     .hero-slide-content {
-      grid-template-rows: 30px 78px 88px 28px;
+      grid-template-rows: 28px 54px auto 36px;
     }
 
     .hero-feature h2,
     #heroLatestTitle {
-      height: 78px;
-      max-height: 78px;
+      height: 54px;
+      max-height: 54px;
       -webkit-line-clamp: 2;
       line-clamp: 2;
-    }
-
-    .hero-feature-image {
-      height: 80px;
-      max-height: 80px;
+      font-size: clamp(18px, 5vw, 20px) !important;
+      line-height: 1.36 !important;
     }
 
     .hero-slider-nav {
@@ -3441,10 +3491,11 @@
         <p class="hero-feature-date" id="heroLatestDate">กำลังโหลดข้อมูล…</p>
         <h2 id="heroLatestTitle">กำลังดึงกิจกรรมล่าสุด</h2>
         <div class="hero-feature-image" id="heroLatestImageFrame">
-          <img id="heroLatestImage" alt="" decoding="async">
+          <img class="hero-feature-image-backdrop" id="heroLatestImageBackdrop" alt="" aria-hidden="true" decoding="async">
+          <img class="hero-feature-image-main" id="heroLatestImage" alt="" decoding="async">
           <span class="hero-feature-image-empty" id="heroLatestImageEmpty">กำลังโหลดรูปกิจกรรม…</span>
         </div>
-        <a class="hero-feature-link" id="heroLatestLink" href="#activityFeed">ดูรายละเอียดกิจกรรม <span aria-hidden="true">↗</span></a>
+        <a class="hero-feature-link" id="heroLatestLink" href="#activityFeed">ดูรายละเอียด <span aria-hidden="true">→</span></a>
       </div>
       <div class="hero-slider-nav" aria-label="สลับกิจกรรมล่าสุด">
         <button class="hero-slider-btn" id="heroPrevBtn" type="button" aria-label="กิจกรรมก่อนหน้า" title="กิจกรรมก่อนหน้า">
@@ -4678,6 +4729,7 @@ function renderHeroSlide(){
   const dateEl = document.getElementById('heroLatestDate');
   const titleEl = document.getElementById('heroLatestTitle');
   const imageEl = document.getElementById('heroLatestImage');
+  const imageBackdropEl = document.getElementById('heroLatestImageBackdrop');
   const imageEmptyEl = document.getElementById('heroLatestImageEmpty');
   const linkEl = document.getElementById('heroLatestLink');
   const countEl = document.getElementById('heroSlideCount');
@@ -4689,8 +4741,10 @@ function renderHeroSlide(){
     dateEl.textContent = 'ยังไม่มีกิจกรรม';
     titleEl.textContent = 'รอข้อมูลกิจกรรมล่าสุด';
     imageEl.removeAttribute('src');
+    imageBackdropEl.removeAttribute('src');
     imageEl.alt = '';
     imageEl.classList.remove('is-visible');
+    imageBackdropEl.classList.remove('is-visible');
     imageEmptyEl.textContent = 'ยังไม่มีรูปกิจกรรม';
     imageEmptyEl.hidden = false;
     linkEl.href = '#activityFeed';
@@ -4709,36 +4763,44 @@ function renderHeroSlide(){
   titleEl.textContent = activityTitle(row);
   linkEl.href = '#activityFeed';
   linkEl.dataset.id = row.id;
-  linkEl.innerHTML = 'ดูรายละเอียดกิจกรรม <span aria-hidden="true">↗</span>';
+  linkEl.innerHTML = 'ดูรายละเอียด <span aria-hidden="true">→</span>';
   countEl.textContent = `${heroSlideIndex + 1} / ${heroSlides.length}`;
 
   const imageUrl = safeHttpUrl(row.img) || heroFallbackImage();
   if(imageUrl){
     imageEl.classList.remove('is-visible');
+    imageBackdropEl.classList.remove('is-visible');
     imageEl.alt = `รูปกิจกรรม: ${activityTitle(row)}`;
     imageEmptyEl.textContent = 'กำลังโหลดรูปกิจกรรม…';
     imageEmptyEl.hidden = false;
     imageEl.onload = () => {
       imageEl.classList.add('is-visible');
+      imageBackdropEl.classList.add('is-visible');
       imageEmptyEl.hidden = true;
     };
     imageEl.onerror = () => {
       imageEl.removeAttribute('src');
+      imageBackdropEl.removeAttribute('src');
       imageEl.classList.remove('is-visible');
+      imageBackdropEl.classList.remove('is-visible');
       imageEmptyEl.textContent = 'ไม่มีรูปกิจกรรม';
       imageEmptyEl.hidden = false;
     };
+    if(imageBackdropEl.src !== imageUrl) imageBackdropEl.src = imageUrl;
     if(imageEl.src !== imageUrl) imageEl.src = imageUrl;
     else if(imageEl.complete && imageEl.naturalWidth){
       imageEl.classList.add('is-visible');
+      imageBackdropEl.classList.add('is-visible');
       imageEmptyEl.hidden = true;
     }
     if(bgImg.src !== imageUrl) bgImg.src = imageUrl;
     bgImg.classList.add('is-visible');
   }else{
     imageEl.removeAttribute('src');
+    imageBackdropEl.removeAttribute('src');
     imageEl.alt = '';
     imageEl.classList.remove('is-visible');
+    imageBackdropEl.classList.remove('is-visible');
     imageEmptyEl.textContent = 'ไม่มีรูปกิจกรรม';
     imageEmptyEl.hidden = false;
     bgImg.removeAttribute('src');
