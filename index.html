@@ -391,7 +391,7 @@
   .card-meta { font-size: 12px; color: var(--text-muted); }
   .card-snippet {
     font-size: 13px; color: var(--text-secondary); line-height: 1.6;
-    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
     flex: 1;
   }
   .card-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
@@ -509,6 +509,57 @@
       transition-duration: 0.001ms !important;
       scroll-behavior: auto !important;
     }
+  }
+
+  .back-to-top {
+    position: fixed;
+    right: 18px;
+    bottom: 82px;
+    z-index: 35;
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,177,47,.42);
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--fx-orange), var(--fx-orange-2));
+    color: #1b0d02;
+    box-shadow: 0 12px 30px rgba(4,13,24,.30);
+    cursor: pointer;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(12px);
+    transition: opacity .2s ease, transform .2s ease, visibility .2s;
+  }
+
+  .back-to-top.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .back-to-top:hover { transform: translateY(-3px); }
+  .back-to-top:active { transform: translateY(0); }
+  .back-to-top:focus-visible {
+    outline: 3px solid #fff;
+    outline-offset: 3px;
+  }
+  .back-to-top svg { width: 21px; height: 21px; }
+
+  @media (max-width: 640px) {
+    .back-to-top {
+      right: 12px;
+      bottom: 68px;
+      width: 44px;
+      height: 44px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .back-to-top { transition: none !important; }
   }
 
 
@@ -1053,7 +1104,7 @@
   .hero-live span { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
   .hero-feature-date { margin: 24px 0 8px; color: var(--text-muted); font-size: 12.5px; }
   .hero-feature h2 { color: var(--landing-ink); font-size: clamp(25px,3vw,36px); line-height: 1.28; letter-spacing: -.025em; }
-  .hero-feature-snippet { margin: 14px 0 24px; color: var(--text-secondary); font-size: 14.5px; line-height: 1.75; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .hero-feature-snippet { margin: 14px 0 24px; color: var(--text-secondary); font-size: 14.5px; line-height: 1.75; display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
   .hero-feature-link { display: inline-flex; align-items: center; gap: 8px; color: var(--landing-ink); font-weight: 800; text-decoration: none; border-bottom: 1px solid rgba(16,42,67,.28); padding-bottom: 3px; }
 
   /* Editorial section rhythm */
@@ -1135,7 +1186,7 @@
   .featured-card .card-body { padding: clamp(26px,3vw,40px); justify-content: center; }
   .featured-card .card-date { color: #e7c875; }
   .featured-card .card-title { color: #fff; font-size: clamp(25px,3vw,36px); line-height: 1.3; }
-  .featured-card .card-snippet { color: rgba(255,255,255,.72); font-size: 15px; -webkit-line-clamp: 5; }
+  .featured-card .card-snippet { color: rgba(255,255,255,.72); font-size: 15px; -webkit-line-clamp: 5; line-clamp: 5; }
   .featured-card .card-actions .btn { border-color: rgba(255,255,255,.22); color: #fff; background: transparent; }
   .featured-card .card-actions .btn.primary { background: var(--landing-gold); border-color: var(--landing-gold); color: #172535; }
 
@@ -2793,6 +2844,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .hero-bg-media img,
+    .hero-feature-image img,
     .hero-slider-dot { transition: none !important; }
   }
 
@@ -2842,16 +2894,35 @@
     line-clamp: 2;
   }
 
-  .hero-feature-snippet,
-  #heroLatestSnippet {
-    margin: 8px 0 0 !important;
+  .hero-feature-image {
+    position: relative;
+    margin: 8px 0 0;
     height: 96px;
     max-height: 96px;
     overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 4;
-    line-clamp: 4;
+    border: 1px solid rgba(169,198,229,.18);
+    border-radius: 12px;
+    background: rgba(4,13,24,.58);
+  }
+
+  .hero-feature-image img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity .22s ease;
+  }
+
+  .hero-feature-image img.is-visible { opacity: 1; }
+
+  .hero-feature-image-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: rgba(220,236,255,.68);
+    font: 600 12px/1.4 "Sarabun", sans-serif;
   }
 
   .hero-feature-link {
@@ -2887,12 +2958,9 @@
       font-size: clamp(22px, 7vw, 30px) !important;
     }
 
-    .hero-feature-snippet,
-    #heroLatestSnippet {
+    .hero-feature-image {
       height: 88px;
       max-height: 88px;
-      -webkit-line-clamp: 3;
-      line-clamp: 3;
     }
   }
 
@@ -2919,12 +2987,9 @@
       line-clamp: 2;
     }
 
-    .hero-feature-snippet,
-    #heroLatestSnippet {
+    .hero-feature-image {
       height: 80px;
       max-height: 80px;
-      -webkit-line-clamp: 3;
-      line-clamp: 3;
     }
 
     .hero-slider-nav {
@@ -3375,7 +3440,10 @@
       <div class="hero-slide-content" id="heroSlideContent" aria-live="polite" aria-atomic="true">
         <p class="hero-feature-date" id="heroLatestDate">กำลังโหลดข้อมูล…</p>
         <h2 id="heroLatestTitle">กำลังดึงกิจกรรมล่าสุด</h2>
-        <p class="hero-feature-snippet" id="heroLatestSnippet">ข้อมูลจะอัปเดตจากแหล่งข้อมูลของโรงเรียนโดยอัตโนมัติ</p>
+        <div class="hero-feature-image" id="heroLatestImageFrame">
+          <img id="heroLatestImage" alt="" decoding="async">
+          <span class="hero-feature-image-empty" id="heroLatestImageEmpty">กำลังโหลดรูปกิจกรรม…</span>
+        </div>
         <a class="hero-feature-link" id="heroLatestLink" href="#activityFeed">ดูรายละเอียดกิจกรรม <span aria-hidden="true">↗</span></a>
       </div>
       <div class="hero-slider-nav" aria-label="สลับกิจกรรมล่าสุด">
@@ -3613,6 +3681,10 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg><span id="toastText"></span></div>
 
+<button class="back-to-top" id="backToTopBtn" type="button" aria-label="กลับขึ้นด้านบน" title="กลับขึ้นด้านบน" tabindex="-1">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>
+</button>
+
 <script>
 /* ============ Configuration ============ */
 // Published-to-web CSV export URL for the Google Sheet.
@@ -3846,6 +3918,33 @@ function renderSmartInsights(){
 /* ============ Utilities ============ */
 const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 const metricAnimations = new WeakMap();
+
+const backToTopBtn = document.getElementById('backToTopBtn');
+let backToTopUpdatePending = false;
+
+function updateBackToTopButton(){
+  const visible = window.scrollY > 480;
+  backToTopBtn.classList.toggle('is-visible', visible);
+  backToTopBtn.tabIndex = visible ? 0 : -1;
+  backToTopBtn.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  backToTopUpdatePending = false;
+}
+
+window.addEventListener('scroll', () => {
+  if(backToTopUpdatePending) return;
+  backToTopUpdatePending = true;
+  window.requestAnimationFrame(updateBackToTopButton);
+}, {passive:true});
+
+backToTopBtn.addEventListener('click', () => {
+  document.getElementById('mainContent').focus({preventScroll:true});
+  window.scrollTo({
+    top: 0,
+    behavior: reducedMotionQuery.matches ? 'auto' : 'smooth'
+  });
+});
+
+updateBackToTopButton();
 
 function formatMetricNumber(value, decimals=0){
   return Number(value).toLocaleString('th-TH', {
@@ -4556,6 +4655,8 @@ function safeHttpUrl(value){
 let heroSlides = [];
 let heroSlideIndex = 0;
 let heroTouchStartX = null;
+let heroAutoplayTimer = null;
+const HERO_AUTOPLAY_DELAY = 6000;
 
 function heroFallbackImage(){
   const candidate = heroSlides.find(r => safeHttpUrl(r.img)) || ROWS.find(r => safeHttpUrl(r.img));
@@ -4576,7 +4677,8 @@ function renderHeroSlide(){
   const row = heroSlides[heroSlideIndex];
   const dateEl = document.getElementById('heroLatestDate');
   const titleEl = document.getElementById('heroLatestTitle');
-  const snippetEl = document.getElementById('heroLatestSnippet');
+  const imageEl = document.getElementById('heroLatestImage');
+  const imageEmptyEl = document.getElementById('heroLatestImageEmpty');
   const linkEl = document.getElementById('heroLatestLink');
   const countEl = document.getElementById('heroSlideCount');
   const bgImg = document.getElementById('heroBgImage');
@@ -4586,7 +4688,11 @@ function renderHeroSlide(){
   if(!row){
     dateEl.textContent = 'ยังไม่มีกิจกรรม';
     titleEl.textContent = 'รอข้อมูลกิจกรรมล่าสุด';
-    snippetEl.textContent = 'เมื่อมีข้อมูลใหม่ ระบบจะแสดงกิจกรรมล่าสุดที่นี่โดยอัตโนมัติ';
+    imageEl.removeAttribute('src');
+    imageEl.alt = '';
+    imageEl.classList.remove('is-visible');
+    imageEmptyEl.textContent = 'ยังไม่มีรูปกิจกรรม';
+    imageEmptyEl.hidden = false;
     linkEl.href = '#activityFeed';
     linkEl.removeAttribute('data-id');
     linkEl.innerHTML = 'ไปยังรายการกิจกรรม <span aria-hidden="true">↓</span>';
@@ -4601,7 +4707,6 @@ function renderHeroSlide(){
 
   dateEl.textContent = fmtThaiDateTime(row.date);
   titleEl.textContent = activityTitle(row);
-  snippetEl.textContent = activitySnippet(row);
   linkEl.href = '#activityFeed';
   linkEl.dataset.id = row.id;
   linkEl.innerHTML = 'ดูรายละเอียดกิจกรรม <span aria-hidden="true">↗</span>';
@@ -4609,9 +4714,33 @@ function renderHeroSlide(){
 
   const imageUrl = safeHttpUrl(row.img) || heroFallbackImage();
   if(imageUrl){
+    imageEl.classList.remove('is-visible');
+    imageEl.alt = `รูปกิจกรรม: ${activityTitle(row)}`;
+    imageEmptyEl.textContent = 'กำลังโหลดรูปกิจกรรม…';
+    imageEmptyEl.hidden = false;
+    imageEl.onload = () => {
+      imageEl.classList.add('is-visible');
+      imageEmptyEl.hidden = true;
+    };
+    imageEl.onerror = () => {
+      imageEl.removeAttribute('src');
+      imageEl.classList.remove('is-visible');
+      imageEmptyEl.textContent = 'ไม่มีรูปกิจกรรม';
+      imageEmptyEl.hidden = false;
+    };
+    if(imageEl.src !== imageUrl) imageEl.src = imageUrl;
+    else if(imageEl.complete && imageEl.naturalWidth){
+      imageEl.classList.add('is-visible');
+      imageEmptyEl.hidden = true;
+    }
     if(bgImg.src !== imageUrl) bgImg.src = imageUrl;
     bgImg.classList.add('is-visible');
   }else{
+    imageEl.removeAttribute('src');
+    imageEl.alt = '';
+    imageEl.classList.remove('is-visible');
+    imageEmptyEl.textContent = 'ไม่มีรูปกิจกรรม';
+    imageEmptyEl.hidden = false;
     bgImg.removeAttribute('src');
     bgImg.classList.remove('is-visible');
   }
@@ -4626,6 +4755,25 @@ function moveHeroSlide(direction){
   if(heroSlides.length <= 1) return;
   heroSlideIndex = (heroSlideIndex + direction + heroSlides.length) % heroSlides.length;
   renderHeroSlide();
+}
+
+function stopHeroAutoplay(){
+  if(heroAutoplayTimer !== null){
+    window.clearInterval(heroAutoplayTimer);
+    heroAutoplayTimer = null;
+  }
+}
+
+function startHeroAutoplay(){
+  stopHeroAutoplay();
+  const carousel = document.getElementById('heroLatestCarousel');
+  const hasInteraction = carousel && (carousel.matches(':hover') || carousel.contains(document.activeElement));
+  if(heroSlides.length <= 1 || reducedMotionQuery.matches || document.hidden || hasInteraction) return;
+  heroAutoplayTimer = window.setInterval(() => moveHeroSlide(1), HERO_AUTOPLAY_DELAY);
+}
+
+function restartHeroAutoplay(){
+  startHeroAutoplay();
 }
 
 function renderHeroFeature(){
@@ -4648,6 +4796,7 @@ function renderHeroFeature(){
   const retainedIndex = currentId ? heroSlides.findIndex(r => r.id === currentId) : -1;
   heroSlideIndex = retainedIndex >= 0 ? retainedIndex : Math.min(heroSlideIndex, Math.max(0, heroSlides.length - 1));
   renderHeroSlide();
+  startHeroAutoplay();
 }
 
 function render(resetPage){
@@ -5312,8 +5461,8 @@ document.getElementById('savedOnlyBtn').addEventListener('click', () => {
 const previewDrawer = document.getElementById('previewDrawer');
 
 
-document.getElementById('heroPrevBtn').addEventListener('click', () => moveHeroSlide(-1));
-document.getElementById('heroNextBtn').addEventListener('click', () => moveHeroSlide(1));
+document.getElementById('heroPrevBtn').addEventListener('click', () => { moveHeroSlide(-1); restartHeroAutoplay(); });
+document.getElementById('heroNextBtn').addEventListener('click', () => { moveHeroSlide(1); restartHeroAutoplay(); });
 document.getElementById('heroSliderDots').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-slide]');
   if(!btn) return;
@@ -5321,6 +5470,7 @@ document.getElementById('heroSliderDots').addEventListener('click', (e) => {
   if(Number.isInteger(index) && index >= 0 && index < heroSlides.length){
     heroSlideIndex = index;
     renderHeroSlide();
+    restartHeroAutoplay();
   }
 });
 document.getElementById('heroLatestLink').addEventListener('click', (e) => {
@@ -5331,16 +5481,35 @@ document.getElementById('heroLatestLink').addEventListener('click', (e) => {
 });
 
 const heroCarousel = document.getElementById('heroLatestCarousel');
+heroCarousel.addEventListener('mouseenter', stopHeroAutoplay);
+heroCarousel.addEventListener('mouseleave', startHeroAutoplay);
+heroCarousel.addEventListener('focusin', stopHeroAutoplay);
+heroCarousel.addEventListener('focusout', (e) => {
+  if(!heroCarousel.contains(e.relatedTarget)) startHeroAutoplay();
+});
 heroCarousel.addEventListener('touchstart', (e) => {
+  stopHeroAutoplay();
   heroTouchStartX = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientX : null;
 }, {passive:true});
 heroCarousel.addEventListener('touchend', (e) => {
-  if(heroTouchStartX == null || !e.changedTouches || !e.changedTouches[0]) return;
+  if(heroTouchStartX == null || !e.changedTouches || !e.changedTouches[0]){
+    restartHeroAutoplay();
+    return;
+  }
   const delta = e.changedTouches[0].clientX - heroTouchStartX;
   heroTouchStartX = null;
-  if(Math.abs(delta) < 48) return;
-  moveHeroSlide(delta < 0 ? 1 : -1);
+  if(Math.abs(delta) >= 48) moveHeroSlide(delta < 0 ? 1 : -1);
+  restartHeroAutoplay();
 }, {passive:true});
+
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden) stopHeroAutoplay();
+  else startHeroAutoplay();
+});
+reducedMotionQuery.addEventListener('change', () => {
+  if(reducedMotionQuery.matches) stopHeroAutoplay();
+  else startHeroAutoplay();
+});
 
 document.getElementById('previewCloseBtn').addEventListener('click', closePreview);
 previewDrawer.addEventListener('click', (e) => {
