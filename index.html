@@ -3738,9 +3738,8 @@
 
 <script>
 /* ============ Configuration ============ */
-// Published-to-web CSV export URL for the Google Sheet.
-// docs.google.com/spreadsheets/d/<ID>/pub?gid=<GID>&single=true&output=csv (after File > Share > Publish to web)
-const DEFAULT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQglHlAmSLvuvNUrWvEfqBIvDPfwReAxIKUS1rxndLECHvPIz0-NszH-ELarnOIiDLZ8J5r-olKMX8H/pub?output=csv";
+// Direct CSV export URL for the current Google Sheet.
+const DEFAULT_CSV_URL = "https://docs.google.com/spreadsheets/d/1NDwKwus3ihw4UWpeBUgSs68qP70-ywiNJUs5TPyZ2pg/export?format=csv";
 
 // Coerce any published-sheet URL variant (pubhtml, pub without output=csv, /edit links, etc.)
 // into a proper CSV export URL, so a pasted link always works regardless of which
