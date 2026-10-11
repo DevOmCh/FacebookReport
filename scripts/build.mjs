@@ -395,6 +395,12 @@ for (const file of ['404.html', 'offline.html', 'manifest.webmanifest', 'favicon
   if (fs.existsSync(source)) fs.copyFileSync(source, path.join(DIST, file));
 }
 
+// Recovered activity photos are served from the same origin as the report.
+const activityImages = path.join(ROOT, 'activity-images');
+if (fs.existsSync(activityImages)) {
+  fs.cpSync(activityImages, path.join(DIST, 'activity-images'), { recursive: true });
+}
+
 // 9) Third-party notices: runtime vendors + self-hosted fonts.
 const noticePackages = [
   ...vendorSpecs.map(({ name, version }) => ({ name, version })),
