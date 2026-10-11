@@ -189,11 +189,42 @@
     render();
   }
 
+  // One failure per full URL per page load, even when an image appears in
+  // the carousel, cards and preview. Keep signed query strings in the key.
+  const failedResources = new Set();
+
+  function showImageFallback(img) {
+    if (img.dataset.activityImage && img.parentElement) {
+      const fallback = document.createElement('div');
+      fallback.className = 'noimg';
+      fallback.textContent = 'ไม่สามารถโหลดรูปกิจกรรมได้';
+      fallback.setAttribute('role', 'img');
+      fallback.setAttribute('aria-label', 'ไม่สามารถโหลดรูปกิจกรรมได้');
+      img.parentElement.replaceChildren(fallback);
+    } else if (img.id === 'heroBgImage') {
+      img.style.visibility = 'hidden';
+    }
+  }
+
   function observeErrors() {
+    window.addEventListener('load', event => {
+      if (event.target instanceof HTMLImageElement && event.target.id === 'heroBgImage') {
+        event.target.style.removeProperty('visibility');
+      }
+    }, true);
     window.addEventListener('error', event => {
       if (event.target && event.target !== window) {
+        const target = event.target;
+        const isImage = target instanceof HTMLImageElement;
+        // Removing src during fallback must not log the document URL or "IMG".
+        const sourceAttribute = target.getAttribute?.('src');
+        if (isImage && !sourceAttribute && !target.getAttribute('srcset')) return;
+        const src = (isImage ? target.currentSrc || sourceAttribute : target.src || target.href) || target.tagName;
+        if (isImage) showImageFallback(target);
+        const key = target.tagName + ':' + src;
+        if (failedResources.has(key)) return;
+        failedResources.add(key);
         metrics.resourceErrors += 1;
-        const src = event.target.src || event.target.href || event.target.tagName;
         log('resource', `โหลด resource ไม่สำเร็จ: ${src}`);
       } else {
         metrics.errors += 1;
