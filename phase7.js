@@ -207,6 +207,11 @@
   }
 
   function observeErrors() {
+    window.addEventListener('load', event => {
+      if (event.target instanceof HTMLImageElement && event.target.id === 'heroBgImage') {
+        event.target.style.removeProperty('visibility');
+      }
+    }, true);
     window.addEventListener('error', event => {
       if (event.target && event.target !== window) {
         const target = event.target;
