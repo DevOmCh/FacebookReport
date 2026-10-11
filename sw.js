@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_VERSION = 'facebookreport-v7-20260914';
+const CACHE_VERSION = 'facebookreport-v7-20261011-image-fallback';
 const CORE_CACHE = `${CACHE_VERSION}-core`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const SCOPE = self.registration.scope;
